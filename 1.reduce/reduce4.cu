@@ -3,63 +3,73 @@
 
 #define THREAD_PER_BLOCK 256
 
-__global__ void reduce0(float* g_idata, float* g_odata) {
+__device__ void warpReduce(volatile float* sdata, int tid) {
+	sdata[tid] += sdata[tid+32];
+	sdata[tid] += sdata[tid+16];
+	sdata[tid] += sdata[tid+8];
+	sdata[tid] += sdata[tid+4];
+	sdata[tid] += sdata[tid+2];
+	sdata[tid] += sdata[tid+1];
+}
+
+__global__ void reduce4(float* g_idata, float* g_odata) {
 
 	__shared__ float sdata[THREAD_PER_BLOCK];
 
-	// æ¯ä¸€ä¸ªçº¿ç¨‹ä»å…¨å±€å†…å­˜è£…è½½ä¸€ä¸ªå…ƒç´ åˆ°å…±äº«å†…å­˜
+	// Ã¿Ò»¸öÏß³Ì´ÓÈ«¾ÖÄÚ´æ×°ÔØÒ»¸öÔªËØµ½¹²ÏíÄÚ´æ
 	unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-	sdata[tid] = g_idata[i];
+	unsigned int i = blockIdx.x * (blockDim.x*2) + threadIdx.x;
+	sdata[tid] = g_idata[i]+g_idata[i+blockDim.x];
 	__syncthreads();
 
-	// åœ¨å…±äº«å†…å­˜ä¸Šæ‰§è¡Œreduceè®¡ç®—
-	for (unsigned int s = 1; s < blockDim.x; s *= 2) {
-		if (tid % (2 * s) == 0) {
+	// ÔÚ¹²ÏíÄÚ´æÉÏÖ´ĞĞreduce¼ÆËã
+	for (unsigned int s = blockDim.x/2; s > 32; s >>= 1) {
+		if (tid < s) {
 			sdata[tid] += sdata[tid + s];
 		}
 		__syncthreads();
 	}
+	if (tid < 32) warpReduce(sdata, tid);
 
-	// å°†è¯¥å—çš„ç»“æœå†™åˆ°å…¨å±€å†…å­˜
+	// ½«¸Ã¿éµÄ½á¹ûĞ´µ½È«¾ÖÄÚ´æ
 	if (tid == 0) g_odata[blockIdx.x] = sdata[0];
 
 }
 
 int main() {
 
-	// 1.ç”³è¯·Hostå†…å­˜
+	// 1.ÉêÇëHostÄÚ´æ
 	const int N = 1024 * 1024 * 32;
-	const int BLOCK_PER_GRID = ceil(static_cast<float>(N) / THREAD_PER_BLOCK);
+	const int BLOCK_PER_GRID = ceil(static_cast<float>(N) / (2*THREAD_PER_BLOCK));
 	float* A_h = NULL;
 	float* Aout_h = NULL;
 	cudaMallocHost((void**)&A_h, N * sizeof(float));
 	cudaMallocHost((void**)&Aout_h, BLOCK_PER_GRID * sizeof(float));
-	// 2.ç”³è¯·Deviceå†…å­˜
+	// 2.ÉêÇëDeviceÄÚ´æ
 	float* A_d = NULL;
 	float* Aout_d = NULL;
 	cudaMalloc((void**)&A_d, N * sizeof(float));
 	cudaMalloc((void**)&Aout_d, BLOCK_PER_GRID * sizeof(float));
-	// 3.åˆå§‹åŒ–
+	// 3.³õÊ¼»¯
 	for (int i = 0; i < N; ++i) {
 		A_h[i] = 1;
 	}
-	// 4.å°†Hostä¸­æ•°æ®æ‹·è´åˆ°Deviceä¸­
+	// 4.½«HostÖĞÊı¾İ¿½±´µ½DeviceÖĞ
 	cudaMemcpy(A_d, A_h, N * sizeof(float), cudaMemcpyHostToDevice);
-	// 5.kernelæ ¸å‡½æ•°
+	// 5.kernelºËº¯Êı
 	dim3 Grid(BLOCK_PER_GRID, 1);
 	dim3 Block(THREAD_PER_BLOCK, 1);
-	reduce0 << <Grid, Block >> > (A_d, Aout_d);
-	// 6.å°†Deviceä¸­æ•°æ®æ‹·è´åˆ°Hostä¸­
+	reduce4 << <Grid, Block >> > (A_d, Aout_d);
+	// 6.½«DeviceÖĞÊı¾İ¿½±´µ½HostÖĞ
 	cudaMemcpy(Aout_h, Aout_d, BLOCK_PER_GRID * sizeof(float), cudaMemcpyDeviceToHost);
-	// 7.åå¤„ç†
+	// 7.ºó´¦Àí
 	for (int i = 0; i < BLOCK_PER_GRID; ++i) {
-		if (Aout_h[i] != THREAD_PER_BLOCK) {
-			std::cout << "Wrong Result!!!" << std::endl;
+		if (Aout_h[i] != THREAD_PER_BLOCK*2) {
+			std::cout << BLOCK_PER_GRID << "Wrong Result!!!" << std::endl;
 			break;
 		}
 	}
-	// 8.é‡Šæ”¾å†…å­˜
+	// 8.ÊÍ·ÅÄÚ´æ
 	cudaFreeHost(A_h);
 	cudaFreeHost(Aout_h);
 	cudaFree(A_d);

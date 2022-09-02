@@ -27,7 +27,7 @@ base的实现
 ``` CUDA
 __global__ void reduce0(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[THREAD_PER_BLOCK];
+	__shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -56,7 +56,7 @@ __global__ void reduce0(float* g_idata, float* g_odata) {
 ``` CUDA
 __global__ void reduce1(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[THREAD_PER_BLOCK];
+	__shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -86,7 +86,7 @@ __global__ void reduce1(float* g_idata, float* g_odata) {
 ``` CUDA
 __global__ void reduce2(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[THREAD_PER_BLOCK];
+	__shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -95,7 +95,7 @@ __global__ void reduce2(float* g_idata, float* g_odata) {
 	__syncthreads();
 
 	// 在共享内存上执行reduce计算
-	for (unsigned int s = blockDim.x/2; s > 0; s >>= 2) {
+	for (unsigned int s = blockDim.x/2; s > 0; s >>= 1) {
 		if (tid < s) {
 			sdata[tid] += sdata[tid + s];
 		}
@@ -115,7 +115,7 @@ __global__ void reduce2(float* g_idata, float* g_odata) {
 ``` CUDA
 __global__ void reduce3(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[];
+	__shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -143,7 +143,7 @@ __global__ void reduce3(float* g_idata, float* g_odata) {
 
 ``` CUDA
 
-__device__ void warpReduce(volatile int* sdata, int tid) {
+__device__ void warpReduce(volatile float* sdata, unsigned int tid) {
 	sdata[tid] += sdata[tid+32];
 	sdata[tid] += sdata[tid+16];
 	sdata[tid] += sdata[tid+8];
@@ -154,7 +154,7 @@ __device__ void warpReduce(volatile int* sdata, int tid) {
 
 __global__ void reduce4(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[];
+	__shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -184,8 +184,8 @@ __global__ void reduce4(float* g_idata, float* g_odata) {
 
 ``` CUDA
 
-Template <unsigned int blockSize>
-__device__ void warpReduce(volatile int* sdata, int tid) {
+template <unsigned int blockSize>
+__device__ void warpReduce(volatile float* sdata, unsigned int tid) {
 	if (blockSize >= 64) sdata[tid] += sdata[tid+32];
 	if (blockSize >= 32) sdata[tid] += sdata[tid+16];
 	if (blockSize >= 16) sdata[tid] += sdata[tid+8];
@@ -194,10 +194,10 @@ __device__ void warpReduce(volatile int* sdata, int tid) {
 	if (blockSize >= 2) sdata[tid] += sdata[tid+1];
 }
 
-Template <unsigned int blockSize>
+template <unsigned int blockSize>
 __global__ void reduce5(float* g_idata, float* g_odata) {
 
-	extern __shared__ float sdata[];
+	extern __shared__ float sdata[THREAD_PER_BLOCK];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
@@ -240,8 +240,8 @@ block数量越多，block可以快速地切换，去掩盖访存的延时。但t
 
 ```
 
-Template <unsigned int blockSize>
-__device__ void warpReduce(volatile int* sdata, int tid) {
+template <unsigned int blockSize>
+__device__ void warpReduce(volatile float* sdata, unsigned int tid) {
 	if (blockSize >= 64) sdata[tid] += sdata[tid+32];
 	if (blockSize >= 32) sdata[tid] += sdata[tid+16];
 	if (blockSize >= 16) sdata[tid] += sdata[tid+8];
@@ -250,21 +250,22 @@ __device__ void warpReduce(volatile int* sdata, int tid) {
 	if (blockSize >= 2) sdata[tid] += sdata[tid+1];
 }
 
-Template <unsigned int blockSize>
-__global__ void reduce5(float* g_idata, float* g_odata) {
+template <unsigned int blockSize, int NUM_THREAD>
+__global__ void reduce6(float* g_idata, float* g_odata, unsigned int n) {
 
-	extern __shared__ float sdata[];
+	__shared__ float sdata[blockSize];
 
 	// 每一个线程从全局内存装载一个元素到共享内存
 	unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x * (blockSize*2) + threadIdx.x;
-	unsigned int gridSize = blockSize * 2 * gridDim.x;
+	unsigned int i = blockIdx.x * (blockSize*NUM_THREAD) + threadIdx.x;
+
 	sdata[tid] = 0;
 
-	while (i < n) {
-		sdata[tid] = g_idata[i]+g_idata[i+blockSize];
-		i += gridSize;
+	#pragma unroll
+	for (int iter = 0; iter < NUM_THREAD; ++iter) {
+		sdata[tid] += g_idata[i+iter*blockSize];
 	}
+
 	__syncthreads();
 
 	// 在共享内存上执行reduce计算
@@ -296,14 +297,16 @@ __global__ void reduce5(float* g_idata, float* g_odata) {
 ```
 
 
-优化七：使用shuffle指令 <br>
-Shuffle指令是一组
-Shuffle指令是一组针对warp的指令。Shuffle指令最重要的特性就是warp内的寄存器可以相互访问。在没有shuffle指令的时候，各个线程在进行通信时只能通过shared memory来访问彼此的寄存器。而采用了shuffle指令之后，warp内的线程可以直接对其他线程的寄存器进行访存。通过这种方式可以减少访存的延时。除此之外，带来的最大好处就是可编程性提高了，在某些场景下，就不用shared memory了。毕竟，开发者要自己去控制 shared memory还是挺麻烦的一个事。
+优化七：使用shuffle指令（未实现） <br>
+采用了shuffle指令之后，warp内的线程可以直接对其他线程的寄存器进行访存，否则各个线程在通信时只能通过shared memory来访问彼此的寄存器。
 
 
-|          |  时间 | 带宽(GB/s) | 加速比 |
+|          |  时间 | 带宽 | 累积加速比 |
 | :-----:  |  :-------:  |  :-------: |  :--: |
-| reduce0  |    1.49ms   | 49.46 | |
-| reduce1  |    1.25ms    | 59.01 | |
-| reduce2  |    0.99693ms    | 73.98 | |
-| reduce3  |    49600    | | |
+| reduce0  |    1.51ms   | 49.22 |  |
+| reduce1  |    1.25ms    | 58.93 | 1.21 |
+| reduce2  |    1.00ms    | 73.82 | 1.51 |
+| reduce3  |    520.30us  | 73.47 | 2.9 |
+| reduce4  |    367.42us  | 92.11 | 4.1 |
+| reduce5  |    355.68us  | 94.07 | 4.24 |
+| reduce6  |    339.74us  | 96.79 | 4.4 |

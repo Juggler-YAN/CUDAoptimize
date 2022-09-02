@@ -1,4 +1,3 @@
-/*
 #include <iostream>
 
 #define THREAD_PER_BLOCK 256
@@ -17,7 +16,7 @@ __global__ void vec2_add(float* a, float* b, float* c) {
 
 int main() {
 
-	// 1.ÉêÇëHostÄÚ´æ
+	// 1.ï¿½ï¿½ï¿½ï¿½Hostï¿½Ú´ï¿½
 	const int N = 1024 * 1024 * 32;
 	const int BLOCK_PER_GRID = N / THREAD_PER_BLOCK;
 	float* A_h = NULL;
@@ -26,37 +25,37 @@ int main() {
 	cudaMallocHost((void**)&A_h, N * sizeof(float));
 	cudaMallocHost((void**)&B_h, N * sizeof(float));
 	cudaMallocHost((void**)&C_h, N * sizeof(float));
-	// 2.ÉêÇëDeviceÄÚ´æ
+	// 2.ï¿½ï¿½ï¿½ï¿½Deviceï¿½Ú´ï¿½
 	float* A_d = NULL;
 	float* B_d = NULL;
 	float* C_d = NULL;
 	cudaMalloc((void**)&A_d, N * sizeof(float));
 	cudaMalloc((void**)&B_d, N * sizeof(float));
 	cudaMalloc((void**)&C_d, N * sizeof(float));
-	// 3.³õÊ¼»¯
+	// 3.ï¿½ï¿½Ê¼ï¿½ï¿½
 	for (int i = 0; i < N; ++i) {
 		A_h[i] = 1;
 		B_h[i] = 1;
 	}
-	// 4.½«HostÖÐÊý¾Ý¿½±´µ½DeviceÖÐ
+	// 4.ï¿½ï¿½Hostï¿½ï¿½ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½ï¿½ï¿½Deviceï¿½ï¿½
 	cudaMemcpy(A_d, A_h, N * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(B_d, B_h, N * sizeof(float), cudaMemcpyHostToDevice);
-	// 5.kernelºËº¯Êý
+	// 5.kernelï¿½Ëºï¿½ï¿½ï¿½
 	dim3 Grid(BLOCK_PER_GRID/2, 1);
 	dim3 Block(THREAD_PER_BLOCK, 1);
 	for (int i = 0; i < 10; ++i) {
 		vec2_add << <Grid, Block >> > (A_d, B_d, C_d);
 	}
-	// 6.½«DeviceÖÐÊý¾Ý¿½±´µ½HostÖÐ
+	// 6.ï¿½ï¿½Deviceï¿½ï¿½ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½ï¿½ï¿½Hostï¿½ï¿½
 	cudaMemcpy(C_h, C_d, N * sizeof(float), cudaMemcpyDeviceToHost);
-	// 7.ºó´¦Àí
+	// 7.ï¿½ï¿½ï¿½ï¿½
 	for (int i = 0; i < N; ++i) {
 		if (C_h[i] != 2) {
 			std::cout << "Wrong Result!!!" << std::endl;
 			break;
 		}
 	}
-	// 8.ÊÍ·ÅÄÚ´æ
+	// 8.ï¿½Í·ï¿½ï¿½Ú´ï¿½
 	cudaFreeHost(A_h);
 	cudaFreeHost(B_h);
 	cudaFreeHost(C_h);
@@ -66,4 +65,3 @@ int main() {
     
 	return 0;
 }
-*/

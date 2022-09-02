@@ -1,4 +1,3 @@
-/*
 #include <iostream>
 
 #define THREAD_PER_BLOCK 256
@@ -16,13 +15,13 @@ __global__ void reduce4(float* g_idata, float* g_odata) {
 
 	__shared__ float sdata[THREAD_PER_BLOCK];
 
-	// Ã¿Ò»¸öÏß³Ì´ÓÈ«¾ÖÄÚ´æ×°ÔØÒ»¸öÔªËØµ½¹²ÏíÄÚ´æ
+	// Ã¿Ò»ï¿½ï¿½ï¿½ß³Ì´ï¿½È«ï¿½ï¿½ï¿½Ú´ï¿½×°ï¿½ï¿½Ò»ï¿½ï¿½Ôªï¿½Øµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
 	unsigned int tid = threadIdx.x;
 	unsigned int i = blockIdx.x * (blockDim.x*2) + threadIdx.x;
 	sdata[tid] = g_idata[i]+g_idata[i+blockDim.x];
 	__syncthreads();
 
-	// ÔÚ¹²ÏíÄÚ´æÉÏÖ´ÐÐreduce¼ÆËã
+	// ï¿½Ú¹ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½Ö´ï¿½ï¿½reduceï¿½ï¿½ï¿½ï¿½
 	for (unsigned int s = blockDim.x/2; s > 32; s >>= 1) {
 		if (tid < s) {
 			sdata[tid] += sdata[tid + s];
@@ -31,45 +30,45 @@ __global__ void reduce4(float* g_idata, float* g_odata) {
 	}
 	if (tid < 32) warpReduce(sdata, tid);
 
-	// ½«¸Ã¿éµÄ½á¹ûÐ´µ½È«¾ÖÄÚ´æ
+	// ï¿½ï¿½ï¿½Ã¿ï¿½Ä½ï¿½ï¿½Ð´ï¿½ï¿½È«ï¿½ï¿½ï¿½Ú´ï¿½
 	if (tid == 0) g_odata[blockIdx.x] = sdata[0];
 
 }
 
 int main() {
 
-	// 1.ÉêÇëHostÄÚ´æ
+	// 1.ï¿½ï¿½ï¿½ï¿½Hostï¿½Ú´ï¿½
 	const int N = 1024 * 1024 * 32;
 	const int BLOCK_PER_GRID = ceil(static_cast<float>(N) / (2*THREAD_PER_BLOCK));
 	float* A_h = NULL;
 	float* Aout_h = NULL;
 	cudaMallocHost((void**)&A_h, N * sizeof(float));
 	cudaMallocHost((void**)&Aout_h, BLOCK_PER_GRID * sizeof(float));
-	// 2.ÉêÇëDeviceÄÚ´æ
+	// 2.ï¿½ï¿½ï¿½ï¿½Deviceï¿½Ú´ï¿½
 	float* A_d = NULL;
 	float* Aout_d = NULL;
 	cudaMalloc((void**)&A_d, N * sizeof(float));
 	cudaMalloc((void**)&Aout_d, BLOCK_PER_GRID * sizeof(float));
-	// 3.³õÊ¼»¯
+	// 3.ï¿½ï¿½Ê¼ï¿½ï¿½
 	for (int i = 0; i < N; ++i) {
 		A_h[i] = 1;
 	}
-	// 4.½«HostÖÐÊý¾Ý¿½±´µ½DeviceÖÐ
+	// 4.ï¿½ï¿½Hostï¿½ï¿½ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½ï¿½ï¿½Deviceï¿½ï¿½
 	cudaMemcpy(A_d, A_h, N * sizeof(float), cudaMemcpyHostToDevice);
-	// 5.kernelºËº¯Êý
+	// 5.kernelï¿½Ëºï¿½ï¿½ï¿½
 	dim3 Grid(BLOCK_PER_GRID, 1);
 	dim3 Block(THREAD_PER_BLOCK, 1);
 	reduce4 << <Grid, Block >> > (A_d, Aout_d);
-	// 6.½«DeviceÖÐÊý¾Ý¿½±´µ½HostÖÐ
+	// 6.ï¿½ï¿½Deviceï¿½ï¿½ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½ï¿½ï¿½Hostï¿½ï¿½
 	cudaMemcpy(Aout_h, Aout_d, BLOCK_PER_GRID * sizeof(float), cudaMemcpyDeviceToHost);
-	// 7.ºó´¦Àí
+	// 7.ï¿½ï¿½ï¿½ï¿½
 	for (int i = 0; i < BLOCK_PER_GRID; ++i) {
 		if (Aout_h[i] != THREAD_PER_BLOCK*2) {
 			std::cout << BLOCK_PER_GRID << "Wrong Result!!!" << std::endl;
 			break;
 		}
 	}
-	// 8.ÊÍ·ÅÄÚ´æ
+	// 8.ï¿½Í·ï¿½ï¿½Ú´ï¿½
 	cudaFreeHost(A_h);
 	cudaFreeHost(Aout_h);
 	cudaFree(A_d);
@@ -77,4 +76,3 @@ int main() {
     
 	return 0;
 }
-*/

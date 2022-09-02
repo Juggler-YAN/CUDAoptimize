@@ -1,4 +1,3 @@
-/*
 #include <iostream>
 
 #define THREAD_PER_BLOCK 256
@@ -7,13 +6,13 @@ __global__ void reduce1(float* g_idata, float* g_odata) {
 
 	__shared__ float sdata[THREAD_PER_BLOCK];
 
-	// 每一个线程从全局内存装载一个元素到共享内存
+	// 每一锟斤拷锟竭程达拷全锟斤拷锟节达拷装锟斤拷一锟斤拷元锟截碉拷锟斤拷锟斤拷锟节达拷
 	unsigned int tid = threadIdx.x;
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 	sdata[tid] = g_idata[i];
 	__syncthreads();
 
-	// 在共享内存上执行reduce计算
+	// 锟节癸拷锟斤拷锟节达拷锟斤拷执锟斤拷reduce锟斤拷锟斤拷
 	for (unsigned int s = 1; s < blockDim.x; s *= 2) {
         int index = 2 * s * tid;
 		if (index < blockDim.x) {
@@ -22,45 +21,45 @@ __global__ void reduce1(float* g_idata, float* g_odata) {
 		__syncthreads();
 	}
 
-	// 将该块的结果写到全局内存
+	// 锟斤拷锟矫匡拷慕锟斤拷写锟斤拷全锟斤拷锟节达拷
 	if (tid == 0) g_odata[blockIdx.x] = sdata[0];
 
 }
 
 int main() {
 
-	// 1.申请Host内存
+	// 1.锟斤拷锟斤拷Host锟节达拷
 	const int N = 1024 * 1024 * 32;
 	const int BLOCK_PER_GRID = ceil(static_cast<float>(N) / THREAD_PER_BLOCK);
 	float* A_h = NULL;
 	float* Aout_h = NULL;
 	cudaMallocHost((void**)&A_h, N * sizeof(float));
 	cudaMallocHost((void**)&Aout_h, BLOCK_PER_GRID * sizeof(float));
-	// 2.申请Device内存
+	// 2.锟斤拷锟斤拷Device锟节达拷
 	float* A_d = NULL;
 	float* Aout_d = NULL;
 	cudaMalloc((void**)&A_d, N * sizeof(float));
 	cudaMalloc((void**)&Aout_d, BLOCK_PER_GRID * sizeof(float));
-	// 3.初始化
+	// 3.锟斤拷始锟斤拷
 	for (int i = 0; i < N; ++i) {
 		A_h[i] = 1;
 	}
-	// 4.将Host中数据拷贝到Device中
+	// 4.锟斤拷Host锟斤拷锟斤拷锟捷匡拷锟斤拷锟斤拷Device锟斤拷
 	cudaMemcpy(A_d, A_h, N * sizeof(float), cudaMemcpyHostToDevice);
-	// 5.kernel核函数
+	// 5.kernel锟剿猴拷锟斤拷
 	dim3 Grid(BLOCK_PER_GRID, 1);
 	dim3 Block(THREAD_PER_BLOCK, 1);
 	reduce1 << <Grid, Block >> > (A_d, Aout_d);
-	// 6.将Device中数据拷贝到Host中
+	// 6.锟斤拷Device锟斤拷锟斤拷锟捷匡拷锟斤拷锟斤拷Host锟斤拷
 	cudaMemcpy(Aout_h, Aout_d, BLOCK_PER_GRID * sizeof(float), cudaMemcpyDeviceToHost);
-	// 7.后处理
+	// 7.锟斤拷锟斤拷
 	for (int i = 0; i < BLOCK_PER_GRID; ++i) {
 		if (Aout_h[i] != THREAD_PER_BLOCK) {
 			std::cout << "Wrong Result!!!" << std::endl;
 			break;
 		}
 	}
-	// 8.释放内存
+	// 8.锟酵凤拷锟节达拷
 	cudaFreeHost(A_h);
 	cudaFreeHost(Aout_h);
 	cudaFree(A_d);
@@ -68,4 +67,3 @@ int main() {
     
 	return 0;
 }
-*/
